@@ -1,0 +1,25 @@
+# EIDE / VSCode generated files
+build/
+.eide/log/
+.vscode/
+.cmsis/
+.pack/
+
+# Keil generated files
+Objects/
+Listings/
+DebugConfig/
+*.o
+*.d
+*.crf
+*.dep
+*.bak
+*.map
+*.hex
+*.bin
+*.elf
+*.out
+
+# User-local Keil settings
+*.uvguix.*
+*.uvoptx
