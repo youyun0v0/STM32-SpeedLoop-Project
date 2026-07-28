@@ -1,8 +1,10 @@
 #ifndef __TIMER_H
 #define __TIMER_H
 
+#include "stm32f10x.h"
+
 void Timer_Init(void);
-void TIM2_IRQHandler(void);
-uint16_t Timer_GetCounter(void);
+uint8_t Timer_TakeControlFlag(void);
+uint32_t Timer_GetTickMs(void);
 
 #endif
