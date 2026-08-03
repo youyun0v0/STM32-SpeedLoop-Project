@@ -1,45 +1,104 @@
 #include "stm32f10x.h"
 #include "bsp_gpio.h"
 #include "bsp_timer.h"
+#include "PWM.h"
+
+#define PWM_TIMER TIM3  //使用的定时器
+#define PWM_PERIOD_COUNTS 1000  //PWM周期计数值
+
+static uint8_t s_duty_percent = 0; //当前占空比百分比
+
+void PWM_LED_Init(void)
+{
+    TIM_OCInitTypeDef TIM_OCInitStructure;
+
+    /*
+     * TIM2的时基已经由Timer_Init()配置为10ms周期。
+     * PA0是TIM2_CH1，这里只配置输出比较通道，不修改TIM2的PSC和ARR。
+     */
+    TIM_OCStructInit(&TIM_OCInitStructure);
+    TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;
+    //PA0实际连接的LED为高电平点亮：高电平持续时间就是LED亮度占空比
+    TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_High;
+    TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
+    TIM_OCInitStructure.TIM_Pulse = 0;
+    TIM_OC1Init(TIM2, &TIM_OCInitStructure);
+
+    BSP_GPIO_InitPin(GPIOA, GPIO_Pin_0, GPIO_Mode_AF_PP, GPIO_Speed_50MHz);
+}
+
+void PWM_SetLEDDuty(uint8_t duty_percent)
+{
+    uint16_t period_counts;
+    uint16_t compare;
+
+    if (duty_percent > 100)
+    {
+        duty_percent = 100;
+    }
+
+    period_counts = (uint16_t)(TIM2->ARR + 1);
+    compare = (uint16_t)(((uint32_t)period_counts * duty_percent) / 100);
+    TIM_SetCompare1(TIM2, compare);
+}
 
 void PWM_Init(void)
 {
-    //1.配置时基单元
-    BSP_TIM_InternalClockConfig(TIM2);//选择内部时钟
-    BSP_TIM_TimeBaseInit(TIM2, 720 - 1, 100 - 1, TIM_CounterMode_Up);//初始化时基单元
-    //1.5 如果需要用到引脚重映射，配置如下
-    //    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);//打开AFIO时钟
-    //    GPIO_PinRemapConfig(GPIO_PartialRemap1_TIM2,ENABLE);//重映射函数：部分重映射可以把TIM2CH1端口从A0重映射到A15
-    //    GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);//解除PA15端口原来自带的端口功能，把PA15变成普通的GPIO口
-    //2.初始化输出比较单元
-        TIM_OCInitTypeDef TIM_OCInitStructure;
-        TIM_OCStructInit(&TIM_OCInitStructure);//结构体赋初始值
-        TIM_OCInitStructure.TIM_OCMode=TIM_OCMode_PWM1;//设置输出比较模式:PWM1
-        TIM_OCInitStructure.TIM_OCPolarity=TIM_OCPolarity_High;//设置输出比较极性：REF有效时，输出高电平
-        TIM_OCInitStructure.TIM_OutputState=TIM_OutputState_Enable;//设置输出使能
-        TIM_OCInitStructure.TIM_Pulse=0;//设置CCR,CCR=500时，高电平为0.5ms，由于舵机要求，参数范围为500-2500
-        //剩下的结构体成员都是高级定时器才需要用的.由于只给部分成员赋值，为了避免不确定的问题，我们需要给结构体先赋一个初值，再修改我们关心的成员
-    //3.初始化GPIO    
-        TIM_OC1Init(TIM2,&TIM_OCInitStructure); 
-        BSP_GPIO_InitPin(GPIOA, GPIO_Pin_0, GPIO_Mode_AF_PP, GPIO_Speed_50MHz);//初始化PA0为TIM2CH1
-    //4.启动定时器
-        TIM_Cmd(TIM2, ENABLE); //使能TIM2
+    TIM_OCInitTypeDef TIM_OCInitStructure;
+
+    //配置时基单元
+    BSP_TIM_InternalClockConfig(PWM_TIMER);
+    BSP_TIM_TimeBaseInit(PWM_TIMER, 72 - 1, PWM_PERIOD_COUNTS - 1, TIM_CounterMode_Up);
+
+    //配置输出比较单元
+    TIM_OCStructInit(&TIM_OCInitStructure);
+    TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;//CNT<CCR时输出有效电平
+    TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_High;//有效电平为高电平
+    TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;//使能输出
+    TIM_OCInitStructure.TIM_Pulse = 0; //初始占空比为0%
+    TIM_OC1Init(PWM_TIMER, &TIM_OCInitStructure);
+
+    BSP_GPIO_InitPin(GPIOA, GPIO_Pin_6, GPIO_Mode_AF_PP, GPIO_Speed_50MHz);
+
+    TIM_Cmd(PWM_TIMER, ENABLE);
 }
+
+void PWM_SetDuty(uint8_t duty_percent)
+{
+    uint16_t compare;
+
+    if (duty_percent > 100)
+    {
+        duty_percent = 100;
+    } //限幅
+
+    s_duty_percent = duty_percent;
+    compare = (uint16_t)duty_percent * 10;
+
+    TIM_SetCompare1(PWM_TIMER, compare); //设置CCR为compare
+}
+
+uint8_t PWM_GetDuty(void)
+{
+    return s_duty_percent;
+}
+
 void PWM_SetCompare1(uint16_t Compare)
 {
-    TIM_SetCompare1(TIM2,Compare);//在运行过程中更改CH1的CCR值
+    TIM_SetCompare1(PWM_TIMER, Compare);
 }
+
 void PWM_SetCompare2(uint16_t Compare)
 {
-    TIM_SetCompare2(TIM2,Compare);//在运行过程中更改CH2的CCR值
+    TIM_SetCompare2(PWM_TIMER, Compare);
 }
 
 void PWM_SetCompare3(uint16_t Compare)
 {
-    TIM_SetCompare3(TIM2,Compare);//在运行过程中更改CH3的CCR值
+    TIM_SetCompare3(PWM_TIMER, Compare);
 }
 
 void PWM_SetPSC(uint16_t PSC)
 {
-    TIM_PrescalerConfig(TIM2,PSC,TIM_PSCReloadMode_Immediate);//在运行过程中更改PSC值,写入的值立即生效（而非在更新事件生效）
+    TIM_PrescalerConfig(PWM_TIMER, PSC, TIM_PSCReloadMode_Immediate);
 }

@@ -27,3 +27,10 @@ void Debug_PrintConfig(void)
     Debug_Print("baud=115200");
     Debug_Print("led=PA0");
 }
+
+void Debug_PrintDuty(uint8_t duty_percent)
+{
+    Serial_SendString("duty=");
+    Serial_SendNumber(duty_percent);
+    Serial_SendString("%\r\n");
+}

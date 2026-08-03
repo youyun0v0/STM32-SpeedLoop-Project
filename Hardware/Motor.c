@@ -1,30 +1,56 @@
 #include "stm32f10x.h"
+#include "bsp_gpio.h"
 #include "PWM.h"
+#include "Motor.h"
 
 void Motor_Init(void)
 {
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);//打开GPIOA时钟（供电）
-    GPIO_InitTypeDef GPIO_InitStructure;//引脚工作参数配置
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4 | GPIO_Pin_5 ;//初始化电机方向控制脚
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;//推挽输出PUSH-PULL
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;//速度50MHz（电平翻转的最大频率）
-    GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化GPIOA
+    //PA4和PA5作为电机的方向控制脚
+    BSP_GPIO_InitPin(GPIOA, GPIO_Pin_4, GPIO_Mode_Out_PP, GPIO_Speed_50MHz);
+    BSP_GPIO_InitPin(GPIOA, GPIO_Pin_5, GPIO_Mode_Out_PP, GPIO_Speed_50MHz);
 
     PWM_Init();
+    Motor_Stop();
 }
 
-void Motor_SetSpeed(int8_t Speed) //速度值在-100到100之间
+void Motor_SetSpeed(int8_t speed)
 {
-    if(Speed>=0) //正转
+    uint8_t duty;
+    //速度限幅：-100 ~ 100
+    if (speed > 100)
     {
-        GPIO_SetBits(GPIOA,GPIO_Pin_4);
-        GPIO_ResetBits(GPIOA,GPIO_Pin_5); //设置电机旋转方向
-        PWM_SetCompare3(Speed);
+        speed = 100;
     }
-    else{
-        GPIO_ResetBits(GPIOA,GPIO_Pin_4);
-        GPIO_SetBits(GPIOA,GPIO_Pin_5); //设置电机旋转方向
-        PWM_SetCompare3(-Speed);//CCR值必须是正数
+    else if (speed < -100)
+    {
+        speed = -100;
     }
+
+    if (speed > 0)
+    {
+        GPIO_SetBits(GPIOA, GPIO_Pin_4);
+        GPIO_ResetBits(GPIOA, GPIO_Pin_5);
+        duty = (uint8_t)speed;
+    }
+    else if (speed < 0)
+    {
+        GPIO_ResetBits(GPIOA, GPIO_Pin_4);
+        GPIO_SetBits(GPIOA, GPIO_Pin_5);
+        duty = (uint8_t)(-speed);
+    }
+    else
+    {
+        Motor_Stop();
+        return;
+    }
+
+    PWM_SetDuty(duty);
 }
 
+void Motor_Stop(void)
+{
+    //停止电机：两个方向控制脚都拉低，PWM占空比为0
+    GPIO_ResetBits(GPIOA, GPIO_Pin_4);
+    GPIO_ResetBits(GPIOA, GPIO_Pin_5);
+    PWM_SetDuty(0);
+}
